@@ -107,7 +107,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: laravel-app
-        path: ./deploy
+        path: ~/deploy.sh
 
     - name: Install sshpass
       run: sudo apt-get update && sudo apt-get install -y sshpass
