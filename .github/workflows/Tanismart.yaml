@@ -1,4 +1,4 @@
-name: Laravel CI/CD (MYSQL)
+name: TANISMART CI/CD Pipeline
 
 on:
   push:
