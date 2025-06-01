@@ -110,7 +110,7 @@ jobs:
         path: ./deploy
 
     - name: Install SSH key
-      uses: appleboy/ssh-action
+      uses: shimataro/ssh-key-action@v2
       with:
         password: ${{ secrets.SSH_KEY_PASSWORD }}
         known_hosts: ${{ secrets.KNOWN_HOSTS }}
