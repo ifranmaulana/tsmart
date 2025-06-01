@@ -4,6 +4,7 @@
          bootstrap="vendor/autoload.php"
          colors="true"
 >
+<phpunit>
     <testsuites>
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
@@ -12,18 +13,27 @@
             <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
+
     <source>
         <include>
             <directory>app</directory>
         </include>
     </source>
+
     <php>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
+        
+        <!-- ✅ MySQL config -->
         <env name="DB_CONNECTION" value="mysql"/>
-        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="DB_HOST" value="127.0.0.1"/>
+        <env name="DB_PORT" value="3306"/>
+        <env name="DB_DATABASE" value="tanismart"/>
+        <env name="DB_USERNAME" value="dbeaver"/>
+        <env name="DB_PASSWORD" value="@Polindra123"/>
+
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
@@ -31,3 +41,4 @@
         <env name="TELESCOPE_ENABLED" value="false"/>
     </php>
 </phpunit>
+
