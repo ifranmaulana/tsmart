@@ -36,21 +36,24 @@ jobs:
         extensions: mbstring, ctype, fileinfo, openssl, PDO, tokenizer, xml, mysql, pdo_mysql
         coverage: none
 
-    - name: Install dependencies
+    - name: Install Composer dependencies
       run: |
         composer install --prefer-dist --no-interaction --no-progress
 
-    - name: Configure MySQL
+    - name: Configure .env for testing
       run: |
         cp .env.example .env
-        sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=mysql/' .env
-        sed -i 's/DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/' .env
-        sed -i 's/DB_PORT=3306/DB_PORT=3306/' .env
-        sed -i 's/DB_DATABASE=laravel/DB_DATABASE=tanismart/' .env
-        sed -i 's/DB_USERNAME=root/DB_USERNAME=dbeaver/' .env
-        sed -i 's/DB_PASSWORD=/DB_PASSWORD=@Polindra123/' .env
+        # Ganti kredensial database untuk lingkungan CI
+        sed -i 's/DB_CONNECTION=.*/DB_CONNECTION=mysql/' .env
+        sed -i 's/DB_HOST=.*/DB_HOST=127.0.0.1/' .env
+        sed -i 's/DB_PORT=.*/DB_PORT=3306/' .env
+        sed -i 's/DB_DATABASE=.*/DB_DATABASE=tanismart/' .env
+        sed -i 's/DB_USERNAME=.*/DB_USERNAME=dbeaver/' .env
+        sed -i 's/DB_PASSWORD=.*/DB_PASSWORD=@Polindra123/' .env
+        # Pastikan APP_ENV diatur ke testing untuk pengujian
+        sed -i 's/APP_ENV=.*/APP_ENV=testing/' .env
 
-    - name: Debug database environment
+    - name: Debug database environment variables
       run: grep DB_ .env
 
     - name: Generate app key
@@ -60,10 +63,10 @@ jobs:
       run: |
         for i in {1..10}; do
           if mysqladmin ping -h127.0.0.1 -udbeaver -p@Polindra123 --silent; then
-            echo "MySQL is ready!"
+            echo "MySQL sudah siap!"
             break
           fi
-          echo "Waiting for MySQL... Attempt $i/10"
+          echo "Menunggu MySQL... Percobaan $i/10"
           sleep 3
         done
 
@@ -75,7 +78,7 @@ jobs:
     - name: Install NPM dependencies
       run: npm ci
 
-    - name: Build frontend
+    - name: Build frontend assets
       run: npm run build
 
     - name: Run database migrations and seed
@@ -84,18 +87,20 @@ jobs:
     - name: Execute tests
       run: php artisan test
 
+    - name: Prepare application for deployment
+      run: |
+        # Hapus dependensi pengembangan dan file yang tidak perlu
+        composer install --no-dev --optimize-autoloader
+        npm prune --production
+        rm -rf .git .github node_modules storage/debugbar # Kecualikan ini dari artifact
+
     - name: Upload artifact for deployment
       uses: actions/upload-artifact@v4
       with:
         name: laravel-app
-        path: |
-          .
-          !.github/
-          !.git/
-          !node_modules/
-          !vendor/
-          !storage/debugbar/
+        path: . # Unggah seluruh direktori saat ini setelah persiapan
         retention-days: 1
+        # Tidak perlu mengecualikan file tertentu di sini, karena sudah dihapus di langkah sebelumnya
 
   deploy:
     needs: build-test
@@ -117,44 +122,66 @@ jobs:
       - name: Deploy to VPS via SSH (password-based)
         run: |
           echo "🔧 Mulai proses deploy Laravel..."
-          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "sudo mkdir -p ~/laravel-app-tanismart"
-          sudo chmod -R 777 ./laravel-app-tanismart/
-          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" scp -o StrictHostKeyChecking=no -P 22 -r ./deploy/* ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/laravel-app-tanismart/
-          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-          cd ~/laravel-app-tanismart
+          # Definisikan variabel untuk penggunaan yang lebih mudah
+          SSH_USER=${{ secrets.SSH_USER }}
+          SSH_HOST=${{ secrets.SSH_HOST }}
+          SSH_KEY_PASSWORD=${{ secrets.SSH_KEY_PASSWORD }} # Menggunakan secret untuk password
+          REMOTE_DEPLOY_DIR="/var/www/laravel-d4rpl2c-kelompok-4"
+          REMOTE_TEMP_DIR="/tmp/tanismart-deploy-$(date +%s)" # Direktori sementara yang unik
 
-            REMOTE_DIR=/var/www/laravel-d4rpl2c-kelompok-4/
+          # Buat direktori sementara di server remote
+          sshpass -p "${SSH_KEY_PASSWORD}" ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} "mkdir -p ${REMOTE_TEMP_DIR}"
 
-            sudo mkdir -p "$REMOTE_DIR"
-            rsync -avz --delete \
+          # Salin artifact ke direktori sementara di server remote
+          # Artifact sudah merupakan aplikasi yang telah disiapkan
+          sshpass -p "${SSH_KEY_PASSWORD}" scp -o StrictHostKeyChecking=no -r ./deploy/* ${SSH_USER}@${SSH_HOST}:${REMOTE_TEMP_DIR}/
+
+          # Jalankan perintah di server remote
+          sshpass -p "${SSH_KEY_PASSWORD}" ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << 'EOF'
+            # Pastikan direktori target ada
+            sudo mkdir -p ${REMOTE_DEPLOY_DIR}
+
+            # Gunakan rsync untuk transfer file dan sinkronisasi yang efisien
+            # --delete: menghapus file asing dari direktori tujuan (bukan dari sumber)
+            # --exclude='.env': penting untuk mencegah penimpaan .env yang sudah ada di server
+            # --exclude='storage': penting untuk mencegah penimpaan storage yang sudah ada di server
+            # --exclude='vendor': vendor ditangani oleh composer install di server
+            # --exclude='node_modules': node_modules ditangani oleh npm install di server
+            # Catatan: Kita sudah membuang dependensi dev dan menghapus .git/.github secara lokal sebelum pembuatan artifact
+            sudo rsync -avz --delete \
               --exclude='.env' \
               --exclude='storage' \
-              --exclude='.git' \
-              --exclude='.github' \
-              ~/laravel-app-tanismart/ "$REMOTE_DIR"
+              --exclude='vendor' \
+              --exclude='node_modules' \
+              ${REMOTE_TEMP_DIR}/ ${REMOTE_DEPLOY_DIR}/
 
-            cd "$REMOTE_DIR" || exit
+            cd ${REMOTE_DEPLOY_DIR} || exit 1
 
-            sudo mkdir -p storage/framework/{cache,sessions,testing,views}
-            sudo mkdir -p storage/logs
+            # Atur izin yang benar untuk storage dan bootstrap/cache
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
 
-            sudo chown -R www-data:www-data storage
-            sudo chmod -R 775 storage
+            # Jalankan Composer install di server untuk dependensi produksi
+            # Ini memastikan konsistensi dan autoloading yang benar di server
+            sudo -u www-data composer install --no-dev --optimize-autoloader
 
-            php artisan config:clear
-            php artisan cache:clear
-            php artisan view:clear
+            # Bersihkan dan cache konfigurasi
+            sudo -u www-data php artisan config:clear
+            sudo -u www-data php artisan cache:clear
+            sudo -u www-data php artisan view:clear
+            sudo -u www-data php artisan config:cache
+            sudo -u www-data php artisan route:cache
+            sudo -u www-data php artisan view:cache
+
+            # Jalankan migrasi database (gunakan --force di produksi)
+            sudo -u www-data php artisan migrate --force
+
+            # Opsional: Restart PHP-FPM atau web server jika diperlukan
+            # sudo systemctl restart php8.3-fpm # Sesuaikan versi PHP jika perlu
+            # sudo systemctl reload nginx # Atau apache2
 
             echo "✅ Deploy selesai!"
 
-            # Run deployment commands
-          cd /var/www/laravel-d4rpl2c-kelompok-4
-          sudo -u www-data composer install --optimize-autoloader --no-dev
-          sudo -u www-data php artisan config:cache
-          sudo -u www-data php artisan route:cache
-          sudo -u www-data php artisan view:cache
-          sudo -u www-data php artisan migrate --force
-
-          # Cleanup
-          rm -rf ~/laravel-app-tanismart
+            # Bersihkan direktori sementara di server remote
+            rm -rf ${REMOTE_TEMP_DIR}
           EOF
