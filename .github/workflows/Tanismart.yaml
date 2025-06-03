@@ -1,4 +1,4 @@
-name: TANISMART CI/CD Pipeline
+name: TANISMART 
 
 on:
   push:
