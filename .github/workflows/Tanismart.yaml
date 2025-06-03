@@ -118,6 +118,9 @@ jobs:
         run: |
           sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             echo "🔧 Mulai proses deploy Laravel..."
+          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/laravel-app-tanismart"
+          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" scp -o StrictHostKeyChecking=no -P 22 -r ./deploy/* ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/laravel-app-tanismart/
+
 
             REMOTE_DIR=/var/www/laravel-d4rpl2c-kelompok4/
 
