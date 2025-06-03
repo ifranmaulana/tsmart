@@ -102,49 +102,44 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
+    name: Manual Laravel Deploy
+
     steps:
-    - name: Download artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: laravel-app
-        path: ./deploy
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: laravel-app
+          path: ./deploy
 
-    - name: Install sshpass
-      run: sudo apt-get update && sudo apt-get install -y sshpass
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
-    - name: Upload deploy script using sshpass + scp
-      run: |
-        sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/laravel-d4rpl2c-kelompok4"
-        sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" scp -o StrictHostKeyChecking=no -P 22 -r ./deploy.sh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/laravel-d4rpl2c-kelompok4/
+      - name: Deploy to VPS via SSH (password-based)
+        run: |
+          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            echo "🔧 Mulai proses deploy Laravel..."
 
-    - name: Remote deploy via SSH
-      run: |
-        sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-          cd ~/laravel-d4rpl2c-kelompok4 || exit
-          sudo rsync -avz --delete \
-            --exclude='.env' \
-            --exclude='storage' \
-            --exclude='.git' \
-            --exclude='.github' \
-            ~/laravel-d4rpl2c-kelompok4/ /var/www/laravel-d4rpl2c-kelompok4/
+            REMOTE_DIR=/var/www/laravel-d4rpl2c-kelompok4/
 
-          sudo mkdir -p /var/www/laravel-d4rpl2c-kelompok4/storage/framework/{cache,sessions,testing,views}
-          sudo mkdir -p /var/www/laravel-d4rpl2c-kelompok4/storage/logs
+            mkdir -p "$REMOTE_DIR"
+            rsync -avz --delete \
+              --exclude='.env' \
+              --exclude='storage' \
+              --exclude='.git' \
+              --exclude='.github' \
+              ~/laravel-d4rpl2c-kelompok4/ "$REMOTE_DIR"
 
-          sudo chown -R www-data:www-data /var/www/laravel-d4rpl2c-kelompok4/storage
-          sudo chown -R www-data:www-data /var/www/laravel-d4rpl2c-kelompok4/bootstrap/cache
-          sudo chmod -R 775 /var/www/laravel-d4rpl2c-kelompok4/storage
-          sudo chmod -R 775 /var/www/laravel-d4rpl2c-kelompok4/bootstrap/cache
+            cd "$REMOTE_DIR" || exit
 
-          cd /var/www/laravel-d4rpl2c-kelompok4 || exit
+            mkdir -p storage/framework/{cache,sessions,testing,views}
+            mkdir -p storage/logs
 
-          sudo -u www-data composer install --optimize-autoloader --no-dev
-          sudo -u www-data php artisan config:cache
-          sudo -u www-data php artisan route:cache
-          sudo -u www-data php artisan view:cache
-          sudo -u www-data php artisan migrate --force
+            sudo chown -R www-data:www-data storage
+            sudo chmod -R 775 storage
 
-          rm -rf ~/laravel-d4rpl2c-kelompok4
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan view:clear
 
-          echo "Deployment selesai!"
-        EOF
+            echo "✅ Deploy selesai!"
+          EOF
