@@ -124,7 +124,7 @@ jobs:
 
             REMOTE_DIR=/var/www/laravel-d4rpl2c-kelompok4/
 
-            mkdir -p "$REMOTE_DIR"
+            sudo mkdir -p "$REMOTE_DIR"
             rsync -avz --delete \
               --exclude='.env' \
               --exclude='storage' \
@@ -134,8 +134,8 @@ jobs:
 
             cd "$REMOTE_DIR" || exit
 
-            mkdir -p storage/framework/{cache,sessions,testing,views}
-            mkdir -p storage/logs
+            sudo mkdir -p storage/framework/{cache,sessions,testing,views}
+            sudo mkdir -p storage/logs
 
             sudo chown -R www-data:www-data storage
             sudo chmod -R 775 storage
