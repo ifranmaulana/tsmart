@@ -124,7 +124,7 @@ jobs:
           mkdir -p ./deploy/storage/framework/{cache,sessions,testing,views}
           mkdir -p ./deploy/storage/logs/
           touch ./deploy/storage/logs/laravel.log
-          cp .env.example ./deploy/.env
+          cp .env ./deploy/.env
 
       - name: Backup existing deployment
         run: |
