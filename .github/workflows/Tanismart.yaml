@@ -86,7 +86,7 @@ jobs:
       run: npm run build
 
     - name: Run database migrations
-      run: php artisan migrate:fresh --force
+      run: php artisan migrate:fresh --
 
     - name: Run tests
       run: php artisan test
@@ -121,29 +121,10 @@ jobs:
 
       - name: Prepare deployment structure
         run: |
-          # Buat struktur direktori
           mkdir -p ./deploy/storage/framework/{cache,sessions,testing,views}
           mkdir -p ./deploy/storage/logs/
           touch ./deploy/storage/logs/laravel.log
-              
-          # Handle .env file
-          if [ -f .env ]; then
-            echo "Using existing .env file"
-            cp .env ./deploy/.env
-          else
-            echo "Creating new .env from example"
-            cp .env.example ./deploy/.env
-              
-            # Set basic production values
-            sed -i 's/APP_ENV=local/APP_ENV=production/' ./deploy/.env
-            sed -i 's/APP_DEBUG=true/APP_DEBUG=false/' ./deploy/.env
-              
-            # Generate app key
-            echo "APP_KEY=$(php artisan key:generate --show)" >> ./deploy/.env
-          fi
-              
-          # Set permission awal
-          chmod 644 ./deploy/.env
+          cp .env.example ./deploy/.env
 
       - name: Backup existing deployment
         run: |
