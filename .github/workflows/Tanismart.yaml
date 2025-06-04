@@ -122,17 +122,16 @@ jobs:
           sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
           cd ~/laravel-app-tanismart
 
-            REMOTE_DIR=/var/www/laravel-d4rpl2c-kelompok-4/
-
-            sudo mkdir -p "$REMOTE_DIR"
-            rsync -avz --delete \
+          echo "🔧 Mulai proses deploy Laravel..."
+            
+            sudo rsync -avz --delete \
               --exclude='.env' \
               --exclude='storage' \
               --exclude='.git' \
               --exclude='.github' \
-              ~/laravel-app-tanismart/ "$REMOTE_DIR"
+              ~/laravel-app-tanismart/ /var/www/laravel-d4rpl2c-kelompok-4
 
-            cd "$REMOTE_DIR" || exit
+            cd /var/www/laravel-d4rpl2c-kelompok-4 || exit
 
             sudo mkdir -p storage/framework/{cache,sessions,testing,views}
             sudo mkdir -p storage/logs
