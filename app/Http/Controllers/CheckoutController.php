@@ -30,7 +30,7 @@ class CheckoutController extends Controller
 
         $params = [
             'transaction_details' => [
-                'order_id' => 'ORDER-' . $transaction->id,
+                'order_id' => 'ORDER-' . $transaction->id . '-' . date('YmdHis') . '-' . rand(1000, 9999),
                 'gross_amount' => $data['price'],
             ],
             'customer_details' => [
@@ -160,8 +160,7 @@ class CheckoutController extends Controller
             $transaction->status = 'success';     
             $transaction->save();
 
-           return redirect()->route('checkout.success', $transactionId)
-    ->with([
+            return redirect()->route('checkout.success', ['transactionId' => $transactionId])    ->with([
         'success' => 'Pembayaran berhasil dan status pesanan diperbarui!',
         'transaction' => $transaction,
     ]);

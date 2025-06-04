@@ -16,7 +16,7 @@ class komentar extends Seeder
      */
     public function run(): void
     {
-        KomentarModel::table('komentar')->insert([
+        DB::table('komentar')->insert([
             'idkomentar' => 3,
             'idartikel' => 7,
             'iduser' => 2,

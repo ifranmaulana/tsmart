@@ -1,10 +1,17 @@
-name: TANISMART CI/CD pipeline
+name: Laravel CI/CD Pipeline (Secure Permission)
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+
+env:
+  APP_ENV: production
+  DEPLOY_DIR: /var/www/laravel-d4rpl2c-kelompok-4
+  BACKUP_DIR: /var/www/backups
+  PHP_USER: www-data
+  PHP_GROUP: www-data
 
 jobs:
   build-test:
@@ -38,32 +45,32 @@ jobs:
 
     - name: Install dependencies
       run: |
-        composer install --prefer-dist --no-interaction --no-progress
+        composer install --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
-    - name: Configure MySQL
+    - name: Configure environment
       run: |
         cp .env.example .env
+        sed -i 's/APP_ENV=local/APP_ENV=production/' .env
+        sed -i 's/APP_DEBUG=true/APP_DEBUG=false/' .env
         sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=mysql/' .env
         sed -i 's/DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/' .env
         sed -i 's/DB_PORT=3306/DB_PORT=3306/' .env
         sed -i 's/DB_DATABASE=laravel/DB_DATABASE=tanismart/' .env
         sed -i 's/DB_USERNAME=root/DB_USERNAME=dbeaver/' .env
         sed -i 's/DB_PASSWORD=/DB_PASSWORD=@Polindra123/' .env
-
-    - name: Debug database environment
-      run: grep DB_ .env
+        echo "APP_URL=${{ secrets.APP_URL }}" >> .env
 
     - name: Generate app key
       run: php artisan key:generate
 
-    - name: Wait for MySQL to be ready
+    - name: Wait for MySQL
       run: |
         for i in {1..10}; do
-          if mysqladmin ping -h127.0.0.1 -udbeaver -p@Polindra123 --silent; then
-            echo "MySQL is ready!"
+          if mysqladmin ping -h127.0.0.1 -udbeaver -p'@Polindra123' --silent; then
+            echo "MySQL ready"
             break
           fi
-          echo "Waiting for MySQL... Attempt $i/10"
+          echo "Waiting for MySQL... ($i/10)"
           sleep 3
         done
 
@@ -73,18 +80,18 @@ jobs:
         node-version: '20'
 
     - name: Install NPM dependencies
-      run: npm ci
+      run: npm ci --prefer-offline
 
     - name: Build frontend
       run: npm run build
 
-    - name: Run database migrations and seed
+    - name: Run database migrations
       run: php artisan migrate:fresh --seed
 
-    - name: Execute tests
+    - name: Run tests
       run: php artisan test
 
-    - name: Upload artifact for deployment
+    - name: Prepare deployment artifact
       uses: actions/upload-artifact@v4
       with:
         name: laravel-app
@@ -102,57 +109,107 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
-    name: Tanismart Deployment to VPS
-
     steps:
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: laravel-app
           path: ./deploy
 
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
-
-      - name: Deploy to VPS via SSH (password-based)
+      - name: Prepare deployment structure
         run: |
-          echo "🔧 Mulai proses deploy Laravel..."
-          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/laravel-app-tanismart"
-          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" scp -o StrictHostKeyChecking=no -P 22 -r ./deploy/* ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/laravel-app-tanismart/
-          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-          cd ~/laravel-app-tanismart
+          mkdir -p ./deploy/storage/framework/{cache,sessions,testing,views}
+          mkdir -p ./deploy/storage/logs/
+          touch ./deploy/storage/logs/laravel.log
+          cp .env.example ./deploy/.env
 
-          echo "🔧 Mulai proses deploy Laravel..."
+      - name: Backup existing deployment
+        run: |
+          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            mkdir -p $BACKUP_DIR
+            sudo cp -r $DEPLOY_DIR $BACKUP_DIR/laravel-backup-$(date +%Y%m%d%H%M%S)
+          "
+
+      - name: Transfer files (secure rsync)
+        run: |
+          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            --exclude='.env' \
+            --exclude='storage/app/public/' \
+            ./deploy/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:$DEPLOY_DIR
+
+      - name: Setup proper permissions and deploy
+        run: |
+          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            # Backup existing .env if exists
+            [ -f $DEPLOY_DIR/.env ] && sudo cp $DEPLOY_DIR/.env /tmp/
             
-            sudo rsync -avz --delete \
-              --exclude='.env' \
-              --exclude='storage' \
-              --exclude='.git' \
-              --exclude='.github' \
-              ~/laravel-app-tanismart/ /var/www/laravel-d4rpl2c-kelompok-4
+            # Set directory structure
+            sudo mkdir -p $DEPLOY_DIR/storage/framework/{cache,sessions,testing,views}
+            sudo mkdir -p $DEPLOY_DIR/storage/logs/
+            
+            # Set ownership
+            sudo chown -R $PHP_USER:$PHP_GROUP $DEPLOY_DIR
+            
+            # Set directory permissions (775)
+            sudo find $DEPLOY_DIR -type d -exec chmod 775 {} \;
+            
+            # Set file permissions (664)
+            sudo find $DEPLOY_DIR -type f -exec chmod 664 {} \;
+            
+            # Special permissions for storage
+            sudo chmod -R 775 $DEPLOY_DIR/storage
+            sudo chmod -R 775 $DEPLOY_DIR/bootstrap/cache
+            
+            # Restore .env with secure permissions
+            [ -f /tmp/.env ] && sudo mv /tmp/.env $DEPLOY_DIR/.env
+            sudo chown $PHP_USER:$PHP_GROUP $DEPLOY_DIR/.env
+            sudo chmod 640 $DEPLOY_DIR/.env
+            
+            # Ensure log file exists and is writable
+            sudo touch $DEPLOY_DIR/storage/logs/laravel.log
+            sudo chown $PHP_USER:$PHP_GROUP $DEPLOY_DIR/storage/logs/laravel.log
+            sudo chmod 664 $DEPLOY_DIR/storage/logs/laravel.log
+            
+            # Laravel deployment commands
+            cd $DEPLOY_DIR
+            sudo -u $PHP_USER composer install --no-dev --optimize-autoloader
+            sudo -u $PHP_USER php artisan storage:link
+            sudo -u $PHP_USER php artisan config:clear
+            sudo -u $PHP_USER php artisan cache:clear
+            sudo -u $PHP_USER php artisan view:clear
+            sudo -u $PHP_USER php artisan config:cache
+            sudo -u $PHP_USER php artisan route:cache
+            sudo -u $PHP_USER php artisan view:cache
+            
+            # Database migration
+            sudo -u $PHP_USER php artisan migrate --force
+            
+            # Restart services
+            sudo systemctl reload nginx
+            sudo systemctl restart php8.3-fpm
+          "
 
-            cd /var/www/laravel-d4rpl2c-kelompok-4 || exit
-
-            sudo mkdir -p storage/framework/{cache,sessions,testing,views}
-            sudo mkdir -p storage/logs
-
-            sudo chown -R www-data:www-data storage
-            sudo chmod -R 775 storage
-
-            php artisan config:clear
-            php artisan cache:clear
-            php artisan view:clear
-
-            echo "✅ Deploy selesai!"
-
-            # Run deployment commands
-          cd /var/www/laravel-d4rpl2c-kelompok-4
-          sudo -u www-data composer install --optimize-autoloader --no-dev
-          sudo -u www-data php artisan config:cache
-          sudo -u www-data php artisan route:cache
-          sudo -u www-data php artisan view:cache
-          sudo -u www-data php artisan migrate --force
-
-          # Cleanup
-          rm -rf ~/laravel-app-tanismart
-          EOF
+      - name: Verify deployment
+        run: |
+          # Check HTTP response
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.APP_URL }})
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Deployment verification failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          
+          # Verify permissions remotely
+          sshpass -p "${{ secrets.SSH_KEY_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            echo '=== Permission Verification ==='
+            ls -ld $DEPLOY_DIR
+            ls -ld $DEPLOY_DIR/storage
+            ls -ld $DEPLOY_DIR/bootstrap/cache
+            ls -l $DEPLOY_DIR/storage/logs/laravel.log
+            ls -l $DEPLOY_DIR/.env
+            echo '=== Log File Test ==='
+            sudo -u $PHP_USER php $DEPLOY_DIR/artisan log:test
+          "
