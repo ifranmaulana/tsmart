@@ -5,7 +5,7 @@
     <section id="home-content" class="content-section active-section">
         <div class="hero d-flex align-items-center">
             <div class="container text-center">
-                <h1 class="display-4 fw-bold mb-4">SELAMAT DATANG DI TANI<span style="color: #3CB371;">SMART</span></h1>
+                <h1 class="display-4 fw-bold mb-4">WELCOME DI TANI<span style="color: #3CB371;">SMART</span></h1>
                 <p class="lead mb-4">Kami menyediakan berbagai produk pertanian terbaik untuk membantu Anda mencapai
                     hasil maksimal. Ingin tahu lebih banyak? Cek artikel-artikel kami yang penuh dengan tips dan
                     informasi terbaru di dunia pertanian!</p>
