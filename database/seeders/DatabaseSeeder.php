@@ -4,7 +4,11 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\User;
-use Database\Seeders\Komentar; // ✅ tambahkan baris ini
+use Database\Seeders\komentar; // ✅ tambahkan baris ini
+use Database\Seeders\artikel; // ✅ tambahkan baris ini
+use Database\Seeders\produk; // ✅ tambahkan baris ini
+use Database\Seeders\produkdetail; // ✅ tambahkan baris ini
+use Database\Seeders\users; // ✅ tambahkan baris ini
 
 class DatabaseSeeder extends Seeder
 {
