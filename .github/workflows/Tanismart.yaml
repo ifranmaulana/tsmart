@@ -1,4 +1,4 @@
-name: Laravel CI/CD Pipeline (Secure Permission)
+name: Laravel CI/CD Pipeline 
 
 on:
   push:
